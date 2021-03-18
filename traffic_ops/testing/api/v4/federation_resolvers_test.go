@@ -17,6 +17,7 @@ package v4
 
 import (
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -41,7 +42,7 @@ func GetTestFederationResolversIMS(t *testing.T) {
 	futureTime := time.Now().AddDate(0, 0, 1)
 	time := futureTime.Format(time.RFC1123)
 	header.Set(rfc.IfModifiedSince, time)
-	_, reqInf, err := TOSession.GetFederationResolversWithHdr(header)
+	_, reqInf, err := TOSession.GetFederationResolvers(nil, header)
 	if err != nil {
 		t.Fatalf("could not GET Federation resolvers: %v", err)
 	}
@@ -56,7 +57,7 @@ func GetTestFederationResolvers(t *testing.T) {
 		t.Fatal("no federation resolvers test data")
 	}
 
-	frs, _, err := TOSession.GetFederationResolvers()
+	frs, _, err := TOSession.GetFederationResolvers(nil, nil)
 	if err != nil {
 		t.Errorf("Unexpected error getting Federation Resolvers: %v", err)
 	}
@@ -76,7 +77,7 @@ func GetTestFederationResolvers(t *testing.T) {
 
 func getFRByIDTest(testFr tc.FederationResolver) func(*testing.T) {
 	return func(t *testing.T) {
-		fr, _, err := TOSession.GetFederationResolverByID(*testFr.ID)
+		fr, _, err := TOSession.GetFederationResolverByID(*testFr.ID, nil)
 		if err != nil {
 			t.Fatalf("Unexpected error getting Federation Resolver by ID %d: %v", *testFr.ID, err)
 		}
@@ -88,19 +89,27 @@ func getFRByIDTest(testFr tc.FederationResolver) func(*testing.T) {
 
 func getFRByIPTest(testFr tc.FederationResolver) func(*testing.T) {
 	return func(t *testing.T) {
-		fr, _, err := TOSession.GetFederationResolverByIPAddress(*testFr.IPAddress)
+		params := url.Values{}
+		params.Set("ipAddress", *testFr.IPAddress)
+		frs, _, err := TOSession.GetFederationResolvers(params, nil)
 		if err != nil {
 			t.Fatalf("Unexpected error getting Federation Resolver by IP %s: %v", *testFr.IPAddress, err)
 		}
 
-		cmpr(testFr, fr, t)
+		if len(frs) != 1 {
+			t.Fatalf("Expected exactly one Federation Resolver with IP address '%s', got: %d", *testFr.IPAddress, len(frs))
+		}
+
+		cmpr(testFr, frs[0], t)
 
 	}
 }
 
 func getFRByTypeTest(testFr tc.FederationResolver) func(*testing.T) {
 	return func(t *testing.T) {
-		frs, _, err := TOSession.GetFederationResolversByType(*testFr.Type)
+		params := url.Values{}
+		params.Set("type", *testFr.Type)
+		frs, _, err := TOSession.GetFederationResolvers(params, nil)
 		if err != nil {
 			t.Fatalf("Unexpected error getting Federation Resolvers by Type %s: %v", *testFr.Type, err)
 		}
@@ -151,7 +160,7 @@ func CreateTestFederationResolvers(t *testing.T) {
 			t.Fatal("testData Federation Resolver has nil Type")
 		}
 
-		tid, _, err := TOSession.GetTypeByName(*fr.Type)
+		tid, _, err := TOSession.GetTypeByName(*fr.Type, nil)
 		if err != nil {
 			t.Fatalf("Couldn't get an ID for type %s", *fr.Type)
 		}
@@ -161,11 +170,11 @@ func CreateTestFederationResolvers(t *testing.T) {
 
 		fr.TypeID = util.UIntPtr(uint(tid[0].ID))
 
-		alerts, _, err := TOSession.CreateFederationResolver(fr)
+		response, _, err := TOSession.CreateFederationResolver(fr, nil)
 		if err != nil {
-			t.Fatalf("failed to create Federation resolver %+v: %v\n\talerts: %+v", fr, err, alerts)
+			t.Fatalf("failed to create Federation resolver %+v: %v\n\talerts: %+v", fr, err, response.Alerts)
 		}
-		for _, a := range alerts.Alerts {
+		for _, a := range response.Alerts.Alerts {
 			if a.Level != tc.SuccessLevel.String() {
 				t.Errorf("Unexpected %s creating a federation resolver: %s", a.Level, a.Text)
 			} else {
@@ -175,11 +184,11 @@ func CreateTestFederationResolvers(t *testing.T) {
 	}
 
 	var invalidFR tc.FederationResolver
-	alerts, _, err := TOSession.CreateFederationResolver(invalidFR)
+	response, _, err := TOSession.CreateFederationResolver(invalidFR, nil)
 	if err == nil {
 		t.Error("Expected an error creating a bad Federation Resolver, but didn't get one")
 	}
-	for _, a := range alerts.Alerts {
+	for _, a := range response.Alerts.Alerts {
 		if a.Level == tc.SuccessLevel.String() {
 			t.Errorf("Unexpected success creating a bad Federation Resolver: %s", a.Text)
 		} else {
@@ -189,11 +198,11 @@ func CreateTestFederationResolvers(t *testing.T) {
 
 	invalidFR.TypeID = util.UIntPtr(1)
 	invalidFR.IPAddress = util.StrPtr("not a valid IP address")
-	alerts, _, err = TOSession.CreateFederationResolver(invalidFR)
+	response, _, err = TOSession.CreateFederationResolver(invalidFR, nil)
 	if err == nil {
 		t.Error("Expected an error creating a bad Federation Resolver, but didn't get one")
 	}
-	for _, a := range alerts.Alerts {
+	for _, a := range response.Alerts.Alerts {
 		if a.Level == tc.SuccessLevel.String() {
 			t.Errorf("Unexpected success creating a bad Federation Resolver: %s", a.Text)
 		} else {
@@ -203,7 +212,7 @@ func CreateTestFederationResolvers(t *testing.T) {
 }
 
 func DeleteTestFederationResolvers(t *testing.T) {
-	frs, _, err := TOSession.GetFederationResolvers()
+	frs, _, err := TOSession.GetFederationResolvers(nil, nil)
 	if err != nil {
 		t.Errorf("Unexpected error getting Federation Resolvers: %v", err)
 	}

@@ -17,74 +17,64 @@
  * under the License.
  */
 import { browser } from 'protractor';
+
 import { LoginPage } from '../PageObjects/LoginPage.po';
 import { TopNavigationPage } from '../PageObjects/TopNavigationPage.po';
 import { API } from '../CommonUtils/API';
 import { StatusesPage } from '../PageObjects/Statuses.po'
+import { statuses } from "../Data";
 
-let fs = require('fs')
-let using = require('jasmine-data-provider');
+const api = new API();
+const loginPage = new LoginPage();
+const topNavigation = new TopNavigationPage();
+const statusesPage = new StatusesPage();
 
-let setupFile = 'Data/Statuses/Setup.json';
-let cleanupFile = 'Data/Statuses/Cleanup.json';
-let filename = 'Data/Statuses/TestCases.json';
-let testData = JSON.parse(fs.readFileSync(filename));
-
-let api = new API();
-let loginPage = new LoginPage();
-let topNavigation = new TopNavigationPage();
-let statusesPage = new StatusesPage();
-
-describe('Setup API for Statuses Test', function(){
-    it('Setup', async function(){
-        let setupData = JSON.parse(fs.readFileSync(setupFile));
-        let output = await api.UseAPI(setupData);
-        expect(output).toBeNull();
-    })
-})
-using(testData.Statuses, async function(statusesData){
-    using(statusesData.Login, function(login){
-        describe('Traffic Portal - Statuses - ' + login.description, function(){
-            it('can login', async function(){
+describe('Setup API for Statuses Test', () => {
+    it('Setup', async () => {
+        await api.UseAPI(statuses.setup);
+    });
+});
+statuses.tests.forEach(async statusesData => {
+    statusesData.logins.forEach(login => {
+        describe(`Traffic Portal - Statuses - ${login.description}`, () => {
+            it('can login', async () => {
                 browser.get(browser.params.baseUrl);
                 await loginPage.Login(login);
                 expect(await loginPage.CheckUserName(login)).toBeTruthy();
-            })
-            it('can open statuses page', async function(){
+            });
+            it('can open statuses page', async () => {
                 await statusesPage.OpenConfigureMenu();
                 await statusesPage.OpenStatusesPage();
-            })
+            });
 
-            using(statusesData.Add, function (add) {
-                it(add.description, async function () {
+            statusesData.add.forEach(add => {
+                it(add.description, async () => {
                     expect(await statusesPage.CreateStatus(add)).toBeTruthy();
                     await statusesPage.OpenStatusesPage();
-                })
-            })
-            using(statusesData.Update, function (update) {
-                it(update.description, async function () {
+                });
+            });
+            statusesData.update.forEach(update => {
+                it(update.description, async () => {
                     await statusesPage.SearchStatus(update.Name);
                     expect(await statusesPage.UpdateStatus(update)).toBeTruthy();
                     await statusesPage.OpenStatusesPage();
-                })
-            })
-            using(statusesData.Remove, function (remove) {
-                it(remove.description, async function () {
+                });
+            });
+            statusesData.remove.forEach(remove => {
+                it(remove.description, async () => {
                     await statusesPage.SearchStatus(remove.Name);
                     expect(await statusesPage.DeleteStatus(remove)).toBeTruthy();
                     await statusesPage.OpenStatusesPage();
-                })
-            })
-            it('can logout', async function () {
+                });
+            });
+            it('can logout', async () => {
                 expect(await topNavigation.Logout()).toBeTruthy();
-            })
-        })
-    })
-})
-describe('Clean Up API for Statuses Test', function () {
-    it('Cleanup', async function () {
-        let cleanupData = JSON.parse(fs.readFileSync(cleanupFile));
-        let output = await api.UseAPI(cleanupData);
-        expect(output).toBeNull();
-    })
-})
+            });
+        });
+    });
+});
+describe('Clean Up API for Statuses Test', () => {
+    it('Cleanup', async () => {
+        await api.UseAPI(statuses.cleanup);
+    });
+});

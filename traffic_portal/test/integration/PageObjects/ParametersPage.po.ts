@@ -16,9 +16,29 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { by, element } from 'protractor'
+import { by, element } from 'protractor';
+
+import { randomize } from "../config";
 import { BasePage } from './BasePage.po';
 import { SideNavigationPage } from './SideNavigationPage.po';
+
+interface DeleteParameter {
+  Name: string;
+  validationMessage?: string;
+}
+
+interface Parameter extends DeleteParameter{
+  ConfigFile: string;
+  Secure: string;
+  Value: string;
+}
+
+interface UpdateParameter {
+  description: string;
+  ConfigFile: string;
+  validationMessage?: string;
+}
+
 export class ParametersPage extends BasePage {
 
   private btnCreateNewParameter = element(by.xpath("//button[@title='Create Parameter']"));
@@ -28,22 +48,22 @@ export class ParametersPage extends BasePage {
   private txtSecure = element(by.name('secure'));
 
   private txtSearch = element(by.id('parametersTable_filter')).element(by.css('label input'));
-  private mnuParametersTable = element(by.id('parametersTable'));
   private btnDelete = element(by.buttonText('Delete'));
   private btnYes = element(by.buttonText('Yes'));
   private txtConfirmName = element(by.name('confirmWithNameInput'));
-  private config = require('../config');
-  private randomize = this.config.randomize;
+  private randomize = randomize;
 
   async OpenParametersPage() {
     let snp = new SideNavigationPage();
     await snp.NavigateToParametersPage();
   }
+
   async OpenConfigureMenu() {
     let snp = new SideNavigationPage();
     await snp.ClickConfigureMenu();
   }
-  async CreateParameter(parameter) {
+
+  public async CreateParameter(parameter: Parameter): Promise<boolean> {
     let result = false;
     let basePage = new BasePage();
     await this.btnCreateNewParameter.click();
@@ -53,7 +73,7 @@ export class ParametersPage extends BasePage {
     await this.txtSecure.sendKeys(parameter.Secure);
     await basePage.ClickCreate();
     result = await basePage.GetOutputMessage().then(function (value) {
-      if (parameter.validationMessage == value) {
+      if (parameter.validationMessage === value) {
         return true;
       } else {
         return false;
@@ -61,6 +81,7 @@ export class ParametersPage extends BasePage {
     })
     return result;
   }
+
   async SearchParameter(nameParameter: string) {
     let name = nameParameter + this.randomize;
     await this.txtSearch.clear();
@@ -71,8 +92,8 @@ export class ParametersPage extends BasePage {
       });
     }).first().click();
   }
-  async UpdateParameter(parameter) {
-    let result = false;
+
+  public async UpdateParameter(parameter: UpdateParameter): Promise<boolean | undefined> {
     let basePage = new BasePage();
     switch (parameter.description) {
       case "update parameter configfile":
@@ -82,21 +103,12 @@ export class ParametersPage extends BasePage {
         await this.btnYes.click();
         break;
       default:
-        result = undefined;
+        return undefined;
     }
-    if (result = !undefined) {
-      result = await basePage.GetOutputMessage().then(function (value) {
-        if (parameter.validationMessage == value) {
-          return true;
-        } else {
-          return false;
-        }
-      })
-
-    }
-    return result;
+    return await basePage.GetOutputMessage().then(value => parameter.validationMessage === value);
   }
-  async DeleteParameter(parameter) {
+
+  async DeleteParameter(parameter: DeleteParameter): Promise<boolean> {
     let result = false;
     let basePage = new BasePage();
     await this.btnDelete.click();
@@ -104,7 +116,7 @@ export class ParametersPage extends BasePage {
     await this.txtConfirmName.sendKeys(parameter.Name + this.randomize);
     await basePage.ClickDeletePermanently();
     result = await basePage.GetOutputMessage().then(function (value) {
-      if (parameter.validationMessage == value) {
+      if (parameter.validationMessage === value) {
         return true;
       } else {
         return false;

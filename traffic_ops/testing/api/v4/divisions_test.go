@@ -17,6 +17,8 @@ package v4
 
 import (
 	"net/http"
+	"net/url"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -37,6 +39,7 @@ func TestDivisions(t *testing.T) {
 		header.Set(rfc.IfModifiedSince, time)
 		header.Set(rfc.IfUnmodifiedSince, time)
 		SortTestDivisions(t)
+		SortTestDivisionDesc(t)
 		UpdateTestDivisions(t)
 		UpdateTestDivisionsWithHeaders(t, header)
 		GetTestDivisionsIMSAfterChange(t, header)
@@ -45,13 +48,17 @@ func TestDivisions(t *testing.T) {
 		etag := rfc.ETag(currentTime)
 		header.Set(rfc.IfMatch, etag)
 		UpdateTestDivisionsWithHeaders(t, header)
+		GetTestPaginationSupportDivision(t)
+		GetDivisionByInvalidId(t)
+		GetDivisionByInvalidName(t)
+		DeleteTestDivisionsByInvalidId(t)
 	})
 }
 
 func UpdateTestDivisionsWithHeaders(t *testing.T, header http.Header) {
 	firstDivision := testData.Divisions[0]
 	// Retrieve the Division by division so we can get the id for the Update
-	resp, _, err := TOSession.GetDivisionByNameWithHdr(firstDivision.Name, header)
+	resp, _, err := TOSession.GetDivisionByName(firstDivision.Name, header)
 	if err != nil {
 		t.Errorf("cannot GET Division by division: %v - %v", firstDivision.Name, err)
 	}
@@ -60,7 +67,7 @@ func UpdateTestDivisionsWithHeaders(t *testing.T, header http.Header) {
 		expectedDivision := "division-test"
 		remoteDivision.Name = expectedDivision
 
-		_, reqInf, err := TOSession.UpdateDivisionByIDWithHdr(remoteDivision.ID, remoteDivision, header)
+		_, reqInf, err := TOSession.UpdateDivision(remoteDivision.ID, remoteDivision, header)
 		if err == nil {
 			t.Errorf("Expected error about precondition failed, but got none")
 		}
@@ -72,7 +79,7 @@ func UpdateTestDivisionsWithHeaders(t *testing.T, header http.Header) {
 
 func GetTestDivisionsIMSAfterChange(t *testing.T, header http.Header) {
 	for _, division := range testData.Divisions {
-		_, reqInf, err := TOSession.GetDivisionByNameWithHdr(division.Name, header)
+		_, reqInf, err := TOSession.GetDivisionByName(division.Name, header)
 		if err != nil {
 			t.Fatalf("could not GET divisions: %v", err)
 		}
@@ -85,7 +92,7 @@ func GetTestDivisionsIMSAfterChange(t *testing.T, header http.Header) {
 	time := futureTime.Format(time.RFC1123)
 	header.Set(rfc.IfModifiedSince, time)
 	for _, division := range testData.Divisions {
-		_, reqInf, err := TOSession.GetDivisionByNameWithHdr(division.Name, header)
+		_, reqInf, err := TOSession.GetDivisionByName(division.Name, header)
 		if err != nil {
 			t.Fatalf("could not GET divisions: %v", err)
 		}
@@ -102,7 +109,7 @@ func GetTestDivisionsIMS(t *testing.T) {
 	time := futureTime.Format(time.RFC1123)
 	header.Set(rfc.IfModifiedSince, time)
 	for _, division := range testData.Divisions {
-		_, reqInf, err := TOSession.GetDivisionByNameWithHdr(division.Name, header)
+		_, reqInf, err := TOSession.GetDivisionByName(division.Name, header)
 		if err != nil {
 			t.Fatalf("could not GET divisions: %v", err)
 		}
@@ -115,12 +122,12 @@ func GetTestDivisionsIMS(t *testing.T) {
 func TryToDeleteDivision(t *testing.T) {
 	division := testData.Divisions[0]
 
-	resp, _, err := TOSession.GetDivisionByName(division.Name)
+	resp, _, err := TOSession.GetDivisionByName(division.Name, nil)
 	if err != nil {
 		t.Errorf("cannot GET Division by name: %v - %v", division.Name, err)
 	}
 	division = resp[0]
-	_, _, err = TOSession.DeleteDivisionByID(division.ID)
+	_, _, err = TOSession.DeleteDivision(division.ID)
 
 	if err == nil {
 		t.Error("should not be able to delete a division prematurely")
@@ -150,13 +157,12 @@ func CreateTestDivisions(t *testing.T) {
 }
 
 func SortTestDivisions(t *testing.T) {
-	var header http.Header
 	var sortedList []string
-	resp, _, err := TOSession.GetDivisionsWithHdr(header)
+	resp, _, err := TOSession.GetDivisions(nil, nil)
 	if err != nil {
 		t.Fatalf("Expected no error, but got %v", err.Error())
 	}
-	for i, _ := range resp {
+	for i := range resp {
 		sortedList = append(sortedList, resp[i].Name)
 	}
 
@@ -168,11 +174,44 @@ func SortTestDivisions(t *testing.T) {
 	}
 }
 
+func SortTestDivisionDesc(t *testing.T) {
+
+	respAsc, _, err1 := TOSession.GetDivisions(nil, nil)
+	params := url.Values{}
+	params.Set("sortOrder", "desc")
+	respDesc, _, err2 := TOSession.GetDivisions(params, nil)
+
+	if err1 != nil {
+		t.Errorf("Expected no error, but got error in Division Ascending %v", err1)
+	}
+	if err2 != nil {
+		t.Errorf("Expected no error, but got error in Division Descending %v", err2)
+	}
+
+	if len(respAsc) == len(respDesc) {
+		if len(respAsc) > 0 && len(respDesc) > 0 {
+			// reverse the descending-sorted response and compare it to the ascending-sorted one
+			for start, end := 0, len(respDesc)-1; start < end; start, end = start+1, end-1 {
+				respDesc[start], respDesc[end] = respDesc[end], respDesc[start]
+			}
+			if respDesc[0].Name != "" && respAsc[0].Name != "" {
+				if !reflect.DeepEqual(respDesc[0].Name, respAsc[0].Name) {
+					t.Errorf("Division responses are not equal after reversal: Asc: %s - Desc: %s", respDesc[0].Name, respAsc[0].Name)
+				}
+			}
+		} else {
+			t.Errorf("No Response returned from GET Division using SortOrder")
+		}
+	} else {
+		t.Fatalf("Division response length are not equal Asc: %d Desc: %d", len(respAsc), len(respDesc))
+	}
+}
+
 func UpdateTestDivisions(t *testing.T) {
 
 	firstDivision := testData.Divisions[0]
 	// Retrieve the Division by division so we can get the id for the Update
-	resp, _, err := TOSession.GetDivisionByName(firstDivision.Name)
+	resp, _, err := TOSession.GetDivisionByName(firstDivision.Name, nil)
 	if err != nil {
 		t.Errorf("cannot GET Division by division: %v - %v", firstDivision.Name, err)
 	}
@@ -180,13 +219,13 @@ func UpdateTestDivisions(t *testing.T) {
 	expectedDivision := "division-test"
 	remoteDivision.Name = expectedDivision
 	var alert tc.Alerts
-	alert, _, err = TOSession.UpdateDivisionByID(remoteDivision.ID, remoteDivision)
+	alert, _, err = TOSession.UpdateDivision(remoteDivision.ID, remoteDivision, nil)
 	if err != nil {
 		t.Errorf("cannot UPDATE Division by id: %v - %v", err, alert)
 	}
 
 	// Retrieve the Division to check division got updated
-	resp, _, err = TOSession.GetDivisionByID(remoteDivision.ID)
+	resp, _, err = TOSession.GetDivisionByID(remoteDivision.ID, nil)
 	if err != nil {
 		t.Errorf("cannot GET Division by division: %v - %v", firstDivision.Name, err)
 	}
@@ -198,7 +237,7 @@ func UpdateTestDivisions(t *testing.T) {
 
 		// Set the name back to the fixture value so we can delete it after
 		remoteDivision.Name = firstDivision.Name
-		alert, _, err = TOSession.UpdateDivisionByID(remoteDivision.ID, remoteDivision)
+		alert, _, err = TOSession.UpdateDivision(remoteDivision.ID, remoteDivision, nil)
 		if err != nil {
 			t.Errorf("cannot UPDATE Division by id: %v - %v", err, alert)
 		}
@@ -207,7 +246,7 @@ func UpdateTestDivisions(t *testing.T) {
 
 func GetTestDivisions(t *testing.T) {
 	for _, division := range testData.Divisions {
-		resp, _, err := TOSession.GetDivisionByName(division.Name)
+		resp, _, err := TOSession.GetDivisionByName(division.Name, nil)
 		if err != nil {
 			t.Errorf("cannot GET Division by division: %v - %v", err, resp)
 		}
@@ -218,24 +257,134 @@ func DeleteTestDivisions(t *testing.T) {
 
 	for _, division := range testData.Divisions {
 		// Retrieve the Division by name so we can get the id
-		resp, _, err := TOSession.GetDivisionByName(division.Name)
+		resp, _, err := TOSession.GetDivisionByName(division.Name, nil)
 		if err != nil {
 			t.Errorf("cannot GET Division by name: %v - %v", division.Name, err)
 		}
 		respDivision := resp[0]
 
-		delResp, _, err := TOSession.DeleteDivisionByID(respDivision.ID)
+		delResp, _, err := TOSession.DeleteDivision(respDivision.ID)
 		if err != nil {
 			t.Errorf("cannot DELETE Division by division: %v - %v", err, delResp)
 		}
 
 		// Retrieve the Division to see if it got deleted
-		divisionResp, _, err := TOSession.GetDivisionByName(division.Name)
+		divisionResp, _, err := TOSession.GetDivisionByName(division.Name, nil)
 		if err != nil {
 			t.Errorf("error deleting Division division: %s", err.Error())
 		}
 		if len(divisionResp) > 0 {
 			t.Errorf("expected Division : %s to be deleted", division.Name)
 		}
+	}
+}
+
+func GetTestPaginationSupportDivision(t *testing.T) {
+	qparams := url.Values{}
+	qparams.Set("orderby", "id")
+	divisions, _, err := TOSession.GetDivisions(qparams, nil)
+	if err != nil {
+		t.Fatalf("cannot GET Divisions: %v", err)
+	}
+
+	if len(divisions) > 0 {
+		qparams = url.Values{}
+		qparams.Set("orderby", "id")
+		qparams.Set("limit", "1")
+		divisionsWithLimit, _, err := TOSession.GetDivisions(qparams, nil)
+		if err == nil {
+			if !reflect.DeepEqual(divisions[:1], divisionsWithLimit) {
+				t.Error("expected GET Divisions with limit = 1 to return first result")
+			}
+		} else {
+			t.Error("Error in getting division by limit")
+		}
+		if len(divisions) > 1 {
+			qparams = url.Values{}
+			qparams.Set("orderby", "id")
+			qparams.Set("limit", "1")
+			qparams.Set("offset", "1")
+			divisionsWithOffset, _, err := TOSession.GetDivisions(qparams, nil)
+			if err == nil {
+				if !reflect.DeepEqual(divisions[1:2], divisionsWithOffset) {
+					t.Error("expected GET Divisions with limit = 1, offset = 1 to return second result")
+				}
+			} else {
+				t.Error("Error in getting division by limit and offset")
+			}
+
+			qparams = url.Values{}
+			qparams.Set("orderby", "id")
+			qparams.Set("limit", "1")
+			qparams.Set("page", "2")
+			divisionsWithPage, _, err := TOSession.GetDivisions(qparams, nil)
+			if err == nil {
+				if !reflect.DeepEqual(divisions[1:2], divisionsWithPage) {
+					t.Error("expected GET Divisions with limit = 1, page = 2 to return second result")
+				}
+			} else {
+				t.Error("Error in getting divisions by limit and page")
+			}
+		} else {
+			t.Errorf("only one division found, so offset functionality can't test")
+		}
+	} else {
+		t.Errorf("No division found to check pagination")
+	}
+
+	qparams = url.Values{}
+	qparams.Set("limit", "-2")
+	_, _, err = TOSession.GetDivisions(qparams, nil)
+	if err == nil {
+		t.Error("expected GET Divisions to return an error when limit is not bigger than -1")
+	} else if !strings.Contains(err.Error(), "must be bigger than -1") {
+		t.Errorf("expected GET Divisions to return an error for limit is not bigger than -1, actual error: " + err.Error())
+	}
+
+	qparams = url.Values{}
+	qparams.Set("limit", "1")
+	qparams.Set("offset", "0")
+	_, _, err = TOSession.GetDivisions(qparams, nil)
+	if err == nil {
+		t.Error("expected GET Divisions to return an error when offset is not a positive integer")
+	} else if !strings.Contains(err.Error(), "must be a positive integer") {
+		t.Errorf("expected GET Divisions to return an error for offset is not a positive integer, actual error: " + err.Error())
+	}
+
+	qparams = url.Values{}
+	qparams.Set("limit", "1")
+	qparams.Set("page", "0")
+	_, _, err = TOSession.GetDivisions(qparams, nil)
+	if err == nil {
+		t.Error("expected GET Divisions to return an error when page is not a positive integer")
+	} else if !strings.Contains(err.Error(), "must be a positive integer") {
+		t.Errorf("expected GET Divisions to return an error for page is not a positive integer, actual error: " + err.Error())
+	}
+}
+
+func GetDivisionByInvalidId(t *testing.T) {
+	resp, _, err := TOSession.GetDivisionByID(10000, nil)
+	if err != nil {
+		t.Errorf("Error!! Getting Division by Invalid ID %v", err)
+	}
+	if len(resp) >= 1 {
+		t.Errorf("Error!! Invalid ID shouldn't have any response %v Error %v", resp, err)
+	}
+}
+
+func GetDivisionByInvalidName(t *testing.T) {
+	resp, _, err := TOSession.GetDivisionByName("abcd", nil)
+	if err != nil {
+		t.Errorf("Getting Division by Invalid Name %v", err)
+	}
+	if len(resp) >= 1 {
+		t.Errorf("Invalid Name shouldn't have any response %v Error %v", resp, err)
+	}
+}
+
+func DeleteTestDivisionsByInvalidId(t *testing.T) {
+	delResp, _, err := TOSession.DeleteDivision(10000)
+	if err == nil {
+		t.Errorf("cannot DELETE Division by Invalid ID: %v - %v", err, delResp)
 	}
 }

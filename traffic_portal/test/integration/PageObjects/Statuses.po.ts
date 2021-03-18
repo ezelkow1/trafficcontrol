@@ -16,10 +16,28 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { ElementFinder, browser, by, element } from 'protractor'
-import { async, delay } from 'q';
+import { browser, by, element } from 'protractor';
+
+import { randomize } from '../config';
 import { BasePage } from './BasePage.po';
 import { SideNavigationPage } from './SideNavigationPage.po';
+
+interface CreateStatus {
+    Name: string;
+    DescriptionData: string;
+    validationMessage: string;
+}
+
+interface UpdateStatus {
+    description: string;
+    DescriptionData: string;
+    validationMessage?: string;
+}
+
+interface DeleteStatus {
+    Name: string;
+    validationMessage?: string;
+}
 
 export class StatusesPage extends BasePage {
     private btnCreateNewStatus = element(by.xpath("//button[@title='Create Status']"))
@@ -28,8 +46,7 @@ export class StatusesPage extends BasePage {
     private txtSearch = element(by.id('statusesTable_filter')).element(by.css('label input'));
     private btnDelete = element(by.buttonText('Delete'));
     private txtConfirmName = element(by.name('confirmWithNameInput'));
-    private config = require('../config');
-    private randomize = this.config.randomize;
+    private randomize = randomize;
 
     async OpenStatusesPage() {
         let snp = new SideNavigationPage();
@@ -39,7 +56,8 @@ export class StatusesPage extends BasePage {
         let snp = new SideNavigationPage();
         await snp.ClickConfigureMenu();
     }
-    async CreateStatus(status) {
+
+    public async CreateStatus(status: CreateStatus): Promise<boolean> {
         let result = false;
         let basePage = new BasePage();
         await this.btnCreateNewStatus.click();
@@ -55,8 +73,8 @@ export class StatusesPage extends BasePage {
         })
         return result;
     }
-    async SearchStatus(nameStatus: string) {
-        let result = false;
+
+    public async SearchStatus(nameStatus: string): Promise<boolean> {
         let snp = new SideNavigationPage();
         let name = nameStatus + this.randomize;
         await snp.NavigateToStatusesPage();
@@ -64,14 +82,12 @@ export class StatusesPage extends BasePage {
         await this.txtSearch.sendKeys(name);
         if (await browser.isElementPresent(element(by.xpath("//td[@data-search='^" + name + "$']"))) == true) {
             await element(by.xpath("//td[@data-search='^" + name + "$']")).click();
-            result = true;
-        } else {
-            result = undefined;
+            return true;
         }
-        return result;
+        return false;
     }
-    async UpdateStatus(status) {
-        let result = false;
+
+    public async UpdateStatus(status: UpdateStatus): Promise<boolean | undefined> {
         let basePage = new BasePage();
         switch (status.description) {
             case "update Status description":
@@ -80,18 +96,12 @@ export class StatusesPage extends BasePage {
                 await basePage.ClickUpdate();
                 break;
             default:
-                result = undefined;
+                return undefined;
         }
-        result = await basePage.GetOutputMessage().then(function (value) {
-            if (status.validationMessage == value) {
-                return true;
-            } else {
-                return false;
-            }
-        })
-        return result;
+        return await basePage.GetOutputMessage().then(value => status.validationMessage === value);
     }
-    async DeleteStatus(status) {
+
+    public async DeleteStatus(status: DeleteStatus): Promise<boolean> {
         let name = status.Name + this.randomize;
         let result = false;
         let basePage = new BasePage();

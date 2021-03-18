@@ -37,6 +37,7 @@ func MakeLoggingDotYAML(
 	hdrComment string,
 ) (Cfg, error) {
 	warnings := []string{}
+	required_indent := 0
 
 	if server.Profile == nil {
 		return Cfg{}, makeErr(warnings, "this server missing Profile")
@@ -47,11 +48,17 @@ func MakeLoggingDotYAML(
 
 	hdr := makeHdrComment(hdrComment)
 
+	version, vwarn := getATSMajorVersion(serverParams)
+	warnings = append(warnings, vwarn...)
 	// note we use the same const as logs.xml - this isn't necessarily a requirement, and we may want to make separate variables in the future.
 	maxLogObjects := MaxLogObjects
 
 	text := hdr
-	text += "\nformats: \n"
+	if version >= 9 {
+		text += "\nlogging:"
+		required_indent += 2
+	}
+	text += "\n" + strings.Repeat(" ", required_indent) + "formats: \n"
 	for i := 0; i < maxLogObjects; i++ {
 		logFormatField := "LogFormat"
 		if i > 0 {
@@ -64,12 +71,12 @@ func MakeLoggingDotYAML(
 				// TODO determine if the line should be excluded. Perl includes it anyway, without checking.
 				warnings = append(warnings, fmt.Sprintf("profile '%v' has logging.yaml format '%v' Name Parameter but no Format Parameter. Setting blank Format!\n", *server.Profile, logFormatField))
 			}
-			text += " - name: " + logFormatName + " \n"
-			text += "   format: '" + format + "'\n"
+			text += strings.Repeat(" ", required_indent) + " - name: " + logFormatName + " \n"
+			text += strings.Repeat(" ", required_indent) + "   format: '" + format + "'\n"
 		}
 	}
 
-	text += "filters:\n"
+	text += strings.Repeat(" ", required_indent) + "filters:\n"
 	for i := 0; i < maxLogObjects; i++ {
 		logFilterField := "LogFilter"
 		if i > 0 {
@@ -85,9 +92,9 @@ func MakeLoggingDotYAML(
 			if logFilterType == "" {
 				logFilterType = "accept"
 			}
-			text += "- name: " + logFilterName + "\n"
-			text += "  action: " + logFilterType + "\n"
-			text += "  condition: " + filter + "\n"
+			text += strings.Repeat(" ", required_indent) + " - name: " + logFilterName + "\n"
+			text += strings.Repeat(" ", required_indent) + "   action: " + logFilterType + "\n"
+			text += strings.Repeat(" ", required_indent) + "   condition: " + filter + "\n"
 		}
 	}
 
@@ -111,30 +118,30 @@ func MakeLoggingDotYAML(
 			logObjectFilters := paramData[logObjectField+".Filters"]
 
 			if firstObject {
-				text += "\nlogs:\n"
+				text += "\n" + strings.Repeat(" ", required_indent) + "logs:\n"
 				firstObject = false
 			}
-			text += "- mode: " + logObjectType + "\n"
-			text += "  filename: " + logObjectFilename + "\n"
-			text += "  format: " + logObjectFormat + "\n"
+			text += strings.Repeat(" ", required_indent) + " - mode: " + logObjectType + "\n"
+			text += strings.Repeat(" ", required_indent) + "   filename: " + logObjectFilename + "\n"
+			text += strings.Repeat(" ", required_indent) + "   format: " + logObjectFormat + "\n"
 
 			if logObjectType != "pipe" {
 				if logObjectRollingEnabled != "" {
-					text += "  rolling_enabled: " + logObjectRollingEnabled + "\n"
+					text += strings.Repeat(" ", required_indent) + "   rolling_enabled: " + logObjectRollingEnabled + "\n"
 				}
 				if logObjectRollingIntervalSec != "" {
-					text += "  rolling_interval_sec: " + logObjectRollingIntervalSec + "\n"
+					text += strings.Repeat(" ", required_indent) + "   rolling_interval_sec: " + logObjectRollingIntervalSec + "\n"
 				}
 				if logObjectRollingOffsetHr != "" {
-					text += "  rolling_offset_hr: " + logObjectRollingOffsetHr + "\n"
+					text += strings.Repeat(" ", required_indent) + "   rolling_offset_hr: " + logObjectRollingOffsetHr + "\n"
 				}
 				if logObjectRollingSizeMb != "" {
-					text += "  rolling_size_mb: " + logObjectRollingSizeMb + "\n"
+					text += strings.Repeat(" ", required_indent) + "   rolling_size_mb: " + logObjectRollingSizeMb + "\n"
 				}
 			}
 			if logObjectFilters != "" {
 				logObjectFilters = strings.Replace(logObjectFilters, "\v", "", -1)
-				text += "  filters: [" + logObjectFilters + "]\n"
+				text += strings.Repeat(" ", required_indent) + "   filters: [" + logObjectFilters + "]\n"
 			}
 		}
 	}

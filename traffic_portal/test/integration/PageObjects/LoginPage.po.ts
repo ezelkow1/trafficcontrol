@@ -16,13 +16,28 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { browser, by, element} from 'protractor'
+import { browser, by, element} from 'protractor';
+
+import { randomize } from "../config";
 import { BasePage } from './BasePage.po'
 
+/**
+ * LoginData is all the data needed to authenticate with Traffic Ops (and some
+ * that isn't).
+ */
 interface LoginData {
-    password: string;
-    username: string;
-    validationMessage: string;
+    /** Optional human-readable description for the login. This is not used.  */
+	description?: string;
+    /** The password used for authentication. */
+	password: string;
+    /** The username of the user as whom to authenticate. */
+	username: string;
+    /**
+     * If present, the content of this string is matched against the alert that
+     * is showing. A value of `undefined` indicates that there should be no
+     * alert.
+     */
+	validationMessage?: string;
 }
 
 export class LoginPage extends BasePage{
@@ -31,23 +46,22 @@ export class LoginPage extends BasePage{
     private btnLogin = element(by.name("loginSubmit"))
     private lnkResetPassword= element (by.xpath("//button[text()='Reset Password']"))
     private lblUserName = element(by.xpath("//span[@id='headerUsername']"))
-    private config = require('../config');
-    private randomize = this.config.randomize;
-    
-    
-    async Login(login:LoginData){
+    private randomize = randomize;
+
+
+    async Login(login: LoginData){
         let result = false;
         const basePage = new BasePage();
         if(login.username === 'admin'){
             await this.txtUserName.sendKeys(login.username)
             await this.txtPassword.sendKeys(login.password)
             await browser.actions().mouseMove(this.btnLogin).perform();
-            await browser.actions().click(this.btnLogin).perform();    
+            await browser.actions().click(this.btnLogin).perform();
         }else{
             await this.txtUserName.sendKeys(login.username+this.randomize)
             await this.txtPassword.sendKeys(login.password)
             await browser.actions().mouseMove(this.btnLogin).perform();
-            await browser.actions().click(this.btnLogin).perform();    
+            await browser.actions().click(this.btnLogin).perform();
         }
         if(await browser.getCurrentUrl() === browser.params.baseUrl + "#!/login"){
             result = await basePage.GetOutputMessage().then(value => value === login.validationMessage);
@@ -56,14 +70,16 @@ export class LoginPage extends BasePage{
         }
         return result;
     }
-    ClickResetPassword(){
+
+    public async ClickResetPassword(): Promise<void> {
         this.lnkResetPassword.click()
     }
-    async CheckUserName(login) {
+
+    public async CheckUserName(login: LoginData): Promise<boolean> {
         if(await this.lblUserName.getText() === 'admin' || await this.lblUserName.getText() === login.username+this.randomize){
             return true;
         }else{
-            return false;   
+            return false;
         }
     }
 };

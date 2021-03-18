@@ -17,80 +17,69 @@
  * under the License.
  */
 import { browser } from 'protractor';
+
 import { LoginPage } from '../PageObjects/LoginPage.po'
 import { CoordinatesPage } from '../PageObjects/CoordinatesPage.po';
 import { API } from '../CommonUtils/API';
 import { TopNavigationPage } from '../PageObjects/TopNavigationPage.po';
+import { coordinates } from "../Data";
 
-let fs = require('fs')
-let using = require('jasmine-data-provider');
-
-let api = new API();
-let loginPage = new LoginPage();
-let topNavigation = new TopNavigationPage();
-let coordinatesPage = new CoordinatesPage();
-
-
-let setupFile = 'Data/Coordinates/Setup.json';
-let cleanupFile = 'Data/Coordinates/Cleanup.json';
-let filename = 'Data/Coordinates/TestCases.json';
-let testData = JSON.parse(fs.readFileSync(filename));
+const api = new API();
+const loginPage = new LoginPage();
+const topNavigation = new TopNavigationPage();
+const coordinatesPage = new CoordinatesPage();
 
 describe('Setup API for coordinates test', function () {
-    it('Setup', async function () {
-        let setupData = JSON.parse(fs.readFileSync(setupFile));
-        let output = await api.UseAPI(setupData);
-        expect(output).toBeNull();
-    })
-})
+    it('Setup', async () => {
+        await api.UseAPI(coordinates.setup);
+    });
+});
 
-using(testData.Coordinates, async function(coordinatesData){
-    using(coordinatesData.Login, function(login){
-        describe('Traffic Portal - Coordinates - ' + login.description, function(){
+coordinates.tests.forEach(async coordinatesData => {
+    coordinatesData.logins.forEach(login => {
+        describe(`Traffic Portal - Coordinates - ${login.description}`, () => {
 
-            it('can login', async function(){
+            it('can login', async () => {
                 browser.get(browser.params.baseUrl);
                 await loginPage.Login(login);
                 expect(await loginPage.CheckUserName(login)).toBeTruthy();
-            })
-            it('can open coordinates page', async function(){
+            });
+            it('can open coordinates page', async () => {
                 await coordinatesPage.OpenTopologyMenu();
                 await coordinatesPage.OpenCoordinatesPage();
-            })
-            using(coordinatesData.Add, function (add) {
+            });
+            coordinatesData.add.forEach(add => {
                 it(add.description, async function () {
                     expect(await coordinatesPage.CreateCoordinates(add)).toBeTruthy();
                     await coordinatesPage.OpenCoordinatesPage();
-                })
-            })
-            using(coordinatesData.Update, function (update) {
-                it(update.description, async function () {
+                });
+            });
+            coordinatesData.update.forEach(update => {
+                it(update.description, async () => {
                     await coordinatesPage.SearchCoordinates(update.Name);
                     expect(await coordinatesPage.UpdateCoordinates(update)).toBeTruthy();
                     await coordinatesPage.OpenCoordinatesPage();
-                })
-            })
-          
-            using(coordinatesData.Remove, function (remove) {
-                it(remove.description, async function () {
+                });
+            });
+
+            coordinatesData.remove.forEach(remove => {
+                it(remove.description, async () => {
                     await coordinatesPage.SearchCoordinates(remove.Name);
                     expect(await coordinatesPage.DeleteCoordinates(remove)).toBeTruthy();
                     await coordinatesPage.OpenCoordinatesPage();
-                })
-            })
+                });
+            });
 
-            it('can logout', async function(){
+            it('can logout', async () => {
                 expect(await topNavigation.Logout()).toBeTruthy();
-            })
-        })
-    })
-})
+            });
+        });
+    });
+});
 
 
-describe('Clean up API for coordinates test', function () {
-    it('Cleanup', async function () {
-        let cleanupData = JSON.parse(fs.readFileSync(cleanupFile));
-        let output = await api.UseAPI(cleanupData);
-        expect(output).toBeNull();
-    })
-})
+describe('Clean up API for coordinates test', () => {
+    it('Cleanup', async () => {
+        await api.UseAPI(coordinates.cleanup);
+    });
+});

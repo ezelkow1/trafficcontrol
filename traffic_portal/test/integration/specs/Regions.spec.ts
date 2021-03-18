@@ -17,76 +17,66 @@
  * under the License.
  */
 import { browser } from 'protractor';
+
 import { LoginPage } from '../PageObjects/LoginPage.po';
 import { TopNavigationPage } from '../PageObjects/TopNavigationPage.po';
 import { API } from '../CommonUtils/API';
 import { RegionsPage } from '../PageObjects/RegionsPage.po';
+import { regions } from "../Data";
 
-let fs = require('fs')
-let using = require('jasmine-data-provider');
+const api = new API();
+const loginPage = new LoginPage();
+const topNavigation = new TopNavigationPage();
+const regionsPage = new RegionsPage();
 
-let setupFile = 'Data/Regions/Setup.json';
-let cleanupFile = 'Data/Regions/Cleanup.json';
-let filename = 'Data/Regions/TestCases.json';
-let testData = JSON.parse(fs.readFileSync(filename));
+describe('Setup Divisions for Regions Test', () => {
+    it('Setup', async () => {
+        await api.UseAPI(regions.setup);
+    });
+});
 
-let api = new API();
-let loginPage = new LoginPage();
-let topNavigation = new TopNavigationPage();
-let regionsPage = new RegionsPage();
-
-describe('Setup Divisions for Regions Test', function(){
-    it('Setup', async function(){
-        let setupData = JSON.parse(fs.readFileSync(setupFile));
-        let output = await api.UseAPI(setupData);
-        expect(output).toBeNull();
-    })
-})
-
-using(testData.Regions, async function(regionsData){
-    using(regionsData.Login, function(login){
-        describe('Traffic Portal - Regions - ' + login.description, function(){
-            it('can login', async function(){
+regions.tests.forEach(async regionsData => {
+    regionsData.logins.forEach(login => {
+        describe(`Traffic Portal - Regions - ${login.description}`, () => {
+            it('can login', async () => {
                 browser.get(browser.params.baseUrl);
                 await loginPage.Login(login);
                 expect(await loginPage.CheckUserName(login)).toBeTruthy();
-            })
-            it('can open regions page', async function(){
+            });
+            it('can open regions page', async () => {
                 await regionsPage.OpenTopologyMenu();
                 await regionsPage.OpenRegionsPage();
-            })
+            });
 
-            using(regionsData.Add, function (add) {
-                it(add.description, async function () {
+            regionsData.add.forEach(add => {
+                it(add.description, async () => {
                     expect(await regionsPage.CreateRegions(add)).toBeTruthy();
                     await regionsPage.OpenRegionsPage();
-                })
-            })
-            using(regionsData.Update, function (update) {
-                it(update.description, async function () {
+                });
+            });
+            regionsData.update.forEach(update => {
+                it(update.description, async () => {
                     await regionsPage.SearchRegions(update.Name);
                     expect(await regionsPage.UpdateRegions(update)).toBeTruthy();
                     await regionsPage.OpenRegionsPage();
-                })
-            })
-            using(regionsData.Remove, function (remove) {
-                it(remove.description, async function () {
+                });
+            });
+            regionsData.remove.forEach(remove => {
+                it(remove.description, async () => {
                     await regionsPage.SearchRegions(remove.Name);
                     expect(await regionsPage.DeleteRegions(remove)).toBeTruthy();
                     await regionsPage.OpenRegionsPage();
-                })
-            })
-            it('can logout', async function () {
+                });
+            });
+            it('can logout', async () => {
                 expect(await topNavigation.Logout()).toBeTruthy();
-            })
-        })
-    })
-})
+            });
+        });
+    });
+});
 
-describe('Clean Up Divisions for Regions Test', function () {
-    it('Cleanup', async function () {
-        let cleanupData = JSON.parse(fs.readFileSync(cleanupFile));
-        let output = await api.UseAPI(cleanupData);
-        expect(output).toBeNull();
-    })
-})
+describe('Clean Up Divisions for Regions Test', () => {
+    it('Cleanup', async () => {
+        await api.UseAPI(regions.cleanup);
+    });
+});

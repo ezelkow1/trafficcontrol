@@ -16,10 +16,30 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { ElementFinder, browser, by, element, ExpectedConditions, protractor } from 'protractor';
-import { async, delay } from 'q';
+import { browser, by, element } from 'protractor';
+
+import { randomize } from "../config";
 import { BasePage } from './BasePage.po';
 import { SideNavigationPage } from './SideNavigationPage.po';
+
+interface CDN {
+  description?: string;
+  DNSSEC: string;
+  Domain: string;
+  Name: string;
+  validationMessage?: string;
+}
+
+interface UpdateCDN {
+  description: string;
+  Name: string;
+  validationMessage?: string;
+}
+
+interface DeleteCDN {
+  Name: string;
+  validationMessage?: string;
+}
 
 export class CDNPage extends BasePage {
 
@@ -28,19 +48,19 @@ export class CDNPage extends BasePage {
   private txtDomain = element(by.name('domainName'));
   private selectDNSSEC = element(by.name('dnssecEnabled'));
   private txtSearch = element(by.id('cdnsTable_filter')).element(by.css('label input'));
-  private mnuCDNTable = element(by.id('cdnsTable'));
   private btnDelete = element(by.buttonText('Delete'));
   private txtConfirmName = element(by.name('confirmWithNameInput'));
   private btnDiffSnapshot = element(by.xpath("//button[@title='Diff CDN Snapshot']"));
   private btnYes = element((by.xpath("//button[text()='Yes']")));
   private btnQueueUpdates = element((by.xpath("//button[contains(text(),'Queue Updates')]")));
-  private config = require('../config');
-  private randomize = this.config.randomize;
-  async OpenCDNsPage() {
+  private randomize = randomize;
+
+  public async OpenCDNsPage(): Promise<void> {
     let snp = new SideNavigationPage();
     await snp.NavigateToCDNPage();
   }
-  async CreateCDN(cdn) {
+
+  public async CreateCDN(cdn: CDN): Promise<boolean> {
     let result = false;
     let snp = new SideNavigationPage();
     let basePage = new BasePage();
@@ -51,7 +71,7 @@ export class CDNPage extends BasePage {
     await this.selectDNSSEC.sendKeys(cdn.DNSSEC);
     await basePage.ClickCreate();
     result = await basePage.GetOutputMessage().then(function (value) {
-      if (cdn.validationMessage == value) {
+      if (cdn.validationMessage === value) {
         return true;
       } else {
         return false;
@@ -61,7 +81,6 @@ export class CDNPage extends BasePage {
   }
 
   async SearchCDN(nameCDN: string) {
-    let result = false;
     let snp = new SideNavigationPage();
     let name = nameCDN + this.randomize;
     await snp.NavigateToCDNPage();
@@ -74,9 +93,8 @@ export class CDNPage extends BasePage {
     }).first().click();
   }
 
-  async UpdateCDN(cdn) {
-    let result = false;
-    let snp = new SideNavigationPage();
+  public async UpdateCDN(cdn: UpdateCDN): Promise<boolean | undefined> {
+    let result: boolean | undefined = false;
     let basePage = new BasePage();
     switch (cdn.description) {
       case 'perform snapshot':
@@ -117,9 +135,9 @@ export class CDNPage extends BasePage {
       }
     })
     return result;
-
   }
-  async DeleteCDN(cdn) {
+
+  public async DeleteCDN(cdn: DeleteCDN): Promise<boolean> {
     let name = cdn.Name + this.randomize;
     let result = false;
     let basePage = new BasePage();

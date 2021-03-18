@@ -35,6 +35,7 @@
 
 # Setting the monitor shell option enables job control, which we need in order
 # to bring traffic_ops_golang back to the foreground.
+trap 'echo "Error on line ${LINENO} of ${0}"; exit 1' ERR
 set -o errexit -o monitor -o pipefail -o xtrace;
 
 # Check that env vars are set
@@ -99,9 +100,9 @@ chmod -R a+rw "$X509_CA_PERSIST_DIR";
 # Write config files
 . /config.sh;
 
-pg_isready=$(rpm -ql postgresql96 | grep bin/pg_isready);
+pg_isready=$(rpm -ql postgresql13 | grep bin/pg_isready);
 if [[ ! -x $pg_isready ]]; then
-	echo "Can't find pg_ready in postgresql96" >&2;
+	echo "Can't find pg_ready in postgresql13" >&2;
 	echo "PATH: $PATH" >&2;
 	find / -name "*postgresql*";
 	exit 1;
@@ -113,8 +114,6 @@ while ! $pg_isready -h "$DB_SERVER" -p "$DB_PORT" -d "$DB_NAME"; do
 done
 
 cd /opt/traffic_ops/app;
-./db/admin --env=production reset;
-./db/admin --env=production upgrade;
 
 # Add admin user -- all other users should be created using the API
 /adduser.pl "$TO_ADMIN_USER" "$TO_ADMIN_PASSWORD" "admin" "root" | psql -v ON_ERROR_STOP=1 -U "$DB_USER" -h "$DB_SERVER" -d "$DB_NAME";
@@ -169,8 +168,9 @@ while true; do
 	echo "Verifying that edge was associated to delivery service...";
 
 	cachegroup="$(to-get "api/${TO_API_VERSION}/servers?hostName=edge" 2>/dev/null | jq -r -c '.response[0]|.cachegroup')"
-	ds_name=$(to-get "api/${TO_API_VERSION}/deliveryservices" 2>/dev/null | jq -r -c '.response[] | select(.cdnName == "'"$CDN_NAME"'").xmlId')
-	topology=$(to-get "api/${TO_API_VERSION}/deliveryservices" 2>/dev/null | jq -r -c '.response[] | select(.cdnName == "'"$CDN_NAME"'").topology')
+	xmlID="$(<<<$DS_HOSTS sed 's/ .*//g')" # Only get the first xmlID
+	ds_name=$(to-get "api/${TO_API_VERSION}/deliveryservices?xmlId=${xmlID}" 2>/dev/null | jq -r -c '.response[] | select(.cdnName == "'"$CDN_NAME"'").xmlId')
+	topology=$(to-get "api/${TO_API_VERSION}/deliveryservices?xmlId=${xmlID}" 2>/dev/null | jq -r -c '.response[] | select(.cdnName == "'"$CDN_NAME"'").topology')
 	topology_node="$(to-get "/api/${TO_API_VERSION}/topologies?name=${topology}" | jq -r '.response[].nodes[] | select(.cachegroup == "'"$cachegroup"'") | .cachegroup')"
 
   if [[ -n "$topology_node" ]] ; then

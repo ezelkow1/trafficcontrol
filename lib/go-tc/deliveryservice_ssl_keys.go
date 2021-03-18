@@ -23,6 +23,8 @@ import (
 	"time"
 
 	"github.com/apache/trafficcontrol/lib/go-util"
+
+	"github.com/lestrrat/go-jwx/jwk"
 )
 
 const DNSSECKSKType = "ksk"
@@ -184,24 +186,45 @@ func (r *DeliveryServiceGenSSLKeysReq) Validate(tx *sql.Tx) error {
 	return nil
 }
 
-type DeliveryServiceLetsEncryptSSLKeysReq struct {
+type DeliveryServiceAcmeSSLKeysReq struct {
 	DeliveryServiceSSLKeysReq
 }
 
-func (r *DeliveryServiceLetsEncryptSSLKeysReq) Validate(tx *sql.Tx) error {
+func (r *DeliveryServiceAcmeSSLKeysReq) Validate(tx *sql.Tx) error {
 	r.Sanitize()
 	errs := r.validateSharedRequiredRequestFields()
+	if len(errs) > 0 {
+		return errors.New("missing fields: " + strings.Join(errs, "; "))
+	}
+	errs = r.validateAcmeSpecificFields()
 	if len(errs) > 0 {
 		return errors.New("missing fields: " + strings.Join(errs, "; "))
 	}
 	return nil
 }
 
+func (r *DeliveryServiceAcmeSSLKeysReq) validateAcmeSpecificFields() []string {
+	errs := []string{}
+	if checkNilOrEmpty(r.AuthType) {
+		errs = append(errs, "authType required")
+	}
+	return errs
+}
+
 func checkNilOrEmpty(s *string) bool {
 	return s == nil || *s == ""
 }
 
-type RiakPingResp struct {
+// URISignerKeyset is the container for the CDN URI signing keys.
+type URISignerKeyset struct {
+	RenewalKid *string               `json:"renewal_kid"`
+	Keys       []jwk.EssentialHeader `json:"keys"`
+}
+
+// Deprecated: use TrafficVaultPingResponse instead.
+type RiakPingResp TrafficVaultPingResponse
+
+type TrafficVaultPingResponse struct {
 	Status string `json:"status"`
 	Server string `json:"server"`
 }
@@ -209,10 +232,12 @@ type RiakPingResp struct {
 // DNSSECKeys is the DNSSEC keys as stored in Riak, plus the DS record text.
 type DNSSECKeys map[string]DNSSECKeySet
 
-// DNSSECKeysV11 is the DNSSEC keys object stored in Riak. The map key strings are both DeliveryServiceNames and CDNNames.
-
+// Deprecated: use DNSSECKeysTrafficVault instead
 type DNSSECKeysRiak DNSSECKeysV11
 
+type DNSSECKeysTrafficVault DNSSECKeysV11
+
+// DNSSECKeysV11 is the DNSSEC keys object stored in Riak. The map key strings are both DeliveryServiceNames and CDNNames.
 type DNSSECKeysV11 map[string]DNSSECKeySetV11
 
 type DNSSECKeySet struct {

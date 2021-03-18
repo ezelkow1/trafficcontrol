@@ -16,13 +16,27 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { ElementFinder, ExpectedConditions, browser, by, element } from 'protractor'
-import { async, delay } from 'q';
+import { by, element } from 'protractor';
+
 import { BasePage } from './BasePage.po';
 import {SideNavigationPage} from '../PageObjects/SideNavigationPage.po';
+import { randomize } from '../config';
+
+interface User {
+  FullName: string;
+  Username: string;
+  Email: string;
+  Role: string;
+  Tenant: string;
+  Password: string;
+  ConfirmPassword: string;
+  PublicSSHKey: string;
+  existsMessage?: string;
+  validationMessage?: string;
+}
 
 export class UsersPage extends BasePage {
-   
+
     private btnCreateNewUser = element(by.css('[title="Create New User"]'));
     private txtFullName = element(by.name('fullName'));
     private txtUserName = element(by.name('uName'));
@@ -32,16 +46,15 @@ export class UsersPage extends BasePage {
     private txtPassword = element(by.name('uPass'));
     private txtConfirmPassword = element(by.name('confirmPassword'));
     private txtPublicSSHKey = element(by.name('publicSshKey'));
-    private config = require('../config');
-    private randomize = this.config.randomize;
-    
+    private randomize = randomize;
+
     async OpenUserPage(){
       let snp = new SideNavigationPage();
       await snp.ClickUserAdminMenu();
       await snp.NavigateToUsersPage();
      }
-     
-    async CreateUser(user) {
+
+    public async CreateUser(user: User): Promise<boolean> {
       let result = false;
       let basePage = new BasePage();
       let snp = new SideNavigationPage();
@@ -65,5 +78,5 @@ export class UsersPage extends BasePage {
       }
       return result;
     }
-  
+
   }

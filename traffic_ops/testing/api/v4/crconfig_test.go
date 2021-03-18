@@ -17,19 +17,68 @@ package v4
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/url"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/apache/trafficcontrol/lib/go-tc"
+	"github.com/apache/trafficcontrol/lib/go-util"
+	toclient "github.com/apache/trafficcontrol/traffic_ops/v4-client"
 )
 
 func TestCRConfig(t *testing.T) {
 	WithObjs(t, []TCObj{CDNs, Types, Tenants, Parameters, Profiles, Statuses, Divisions, Regions, PhysLocations, CacheGroups, Servers, Topologies, DeliveryServices}, func() {
 		UpdateTestCRConfigSnapshot(t)
+		MonitoringConfig(t)
 		SnapshotTestCDNbyName(t)
 		SnapshotTestCDNbyInvalidName(t)
 		SnapshotTestCDNbyID(t)
 		SnapshotTestCDNbyInvalidID(t)
+		SnapshotWithReadOnlyUser(t)
 	})
+}
+
+func SnapshotWithReadOnlyUser(t *testing.T) {
+	if len(testData.CDNs) == 0 {
+		t.Fatalf("expected one or more valid CDNs, but got none")
+	}
+	resp, _, err := TOSession.GetTenantByName("root", nil)
+	if err != nil {
+		t.Fatalf("couldn't get the root tenant ID: %v", err)
+	}
+
+	toReqTimeout := time.Second * time.Duration(Config.Default.Session.TimeoutInSecs)
+	user := tc.User{
+		Username:             util.StrPtr("test_user"),
+		RegistrationSent:     tc.TimeNoModFromTime(time.Now()),
+		LocalPassword:        util.StrPtr("test_pa$$word"),
+		ConfirmLocalPassword: util.StrPtr("test_pa$$word"),
+		RoleName:             util.StrPtr("read-only user"),
+	}
+	user.Email = util.StrPtr("email@domain.com")
+	user.TenantID = util.IntPtr(resp.ID)
+	user.FullName = util.StrPtr("firstName LastName")
+
+	u, _, err := TOSession.CreateUser(user)
+	if err != nil {
+		t.Fatalf("could not create read-only user: %v", err)
+	}
+	client, _, err := toclient.LoginWithAgent(TOSession.URL, "test_user", "test_pa$$word", true, "to-api-v4-client-tests/tenant4user", true, toReqTimeout)
+	if err != nil {
+		t.Fatalf("failed to log in with test_user: %v", err.Error())
+	}
+	reqInf, err := client.SnapshotCRConfig(testData.CDNs[0].Name, nil)
+	if err == nil {
+		t.Errorf("expected to get an error about a read-only client trying to snap a CDN, but got none")
+	}
+	if reqInf.StatusCode != http.StatusForbidden {
+		t.Errorf("expected a 403 forbidden status code, but got %d", reqInf.StatusCode)
+	}
+	if u.Response.Username != nil {
+		ForceDeleteTestUsersByUsernames(t, []string{"test_user"})
+	}
 }
 
 func UpdateTestCRConfigSnapshot(t *testing.T) {
@@ -54,7 +103,7 @@ func UpdateTestCRConfigSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetServers err expected nil, actual %+v", err)
 	}
-	servers := resp
+	servers := resp.Response
 	serverID := 0
 	for _, server := range servers {
 		if server.Type == "EDGE" && *server.CDNName == "cdn1" {
@@ -65,7 +114,7 @@ func UpdateTestCRConfigSnapshot(t *testing.T) {
 	if serverID == 0 {
 		t.Errorf("GetServers expected EDGE server in cdn1, actual: %+v", servers)
 	}
-	res, _, err := TOSession.GetDeliveryServiceByXMLIDNullable("anymap-ds")
+	res, _, err := TOSession.GetDeliveryServiceByXMLID("anymap-ds", nil)
 	if err != nil {
 		t.Errorf("GetDeliveryServiceByXMLIDNullable err expected nil, actual %+v", err)
 	}
@@ -81,7 +130,7 @@ func UpdateTestCRConfigSnapshot(t *testing.T) {
 		t.Errorf("POST delivery service servers: %v", err)
 	}
 
-	_, err = TOSession.SnapshotCRConfig(cdn)
+	_, err = TOSession.SnapshotCRConfig(cdn, nil)
 	if err != nil {
 		t.Errorf("SnapshotCRConfig err expected nil, actual %+v", err)
 	}
@@ -122,7 +171,9 @@ func UpdateTestCRConfigSnapshot(t *testing.T) {
 		t.Errorf("GetCRConfig crc.Stats.Path expected: '"+tmURLExpected+"', actual: %+v", *crc.Stats.TMHost)
 	}
 
-	paramResp, _, err := TOSession.GetParameterByName(tmURLParamName)
+	params := url.Values{}
+	params.Set("name", tmURLParamName)
+	paramResp, _, err := TOSession.GetParameters(nil, params)
 	if err != nil {
 		t.Fatalf("cannot GET Parameter by name: %v - %v", tmURLParamName, err)
 	}
@@ -131,7 +182,7 @@ func UpdateTestCRConfigSnapshot(t *testing.T) {
 	}
 	tmURLParam := paramResp[0]
 
-	delResp, _, err := TOSession.DeleteParameterByID(tmURLParam.ID)
+	delResp, _, err := TOSession.DeleteParameter(tmURLParam.ID)
 	if err != nil {
 		t.Fatalf("cannot DELETE Parameter by name: %v - %v", err, delResp)
 	}
@@ -154,10 +205,90 @@ func UpdateTestCRConfigSnapshot(t *testing.T) {
 	}
 }
 
+func MonitoringConfig(t *testing.T) {
+	if len(testData.CDNs) < 1 {
+		t.Fatalf("no cdn test data")
+	}
+	const cdnName = "cdn1"
+	const profileName = "EDGE1"
+	cdns, _, err := TOSession.GetCDNByName(cdnName, nil)
+	if err != nil {
+		t.Fatalf("getting CDNs with name '%s': %s", cdnName, err.Error())
+	}
+	if len(cdns) < 1 {
+		t.Fatalf("expected to find a CDN named %s", cdnName)
+	}
+	if len(cdns) > 1 {
+		t.Fatalf("expected exactly 1 CDN named %s but found %d CDNs", cdnName, len(cdns))
+	}
+	profiles, _, err := TOSession.GetProfileByName(profileName, nil)
+	if err != nil {
+		t.Fatalf("getting Profiles with name '%s': %s", profileName, err.Error())
+	}
+	if len(profiles) != 1 {
+		t.Fatalf("expected exactly 1 Profiles named %s but found %d Profiles", profileName, len(profiles))
+	}
+	parameters, _, err := TOSession.GetParametersByProfileName(profileName, nil)
+	if err != nil {
+		t.Fatalf("getting Parameters by Profile name '%s': %s", profileName, err.Error())
+	}
+	parameterMap := map[string]tc.HealthThreshold{}
+	parameterFound := map[string]bool{}
+	const thresholdPrefixLength = len(tc.ThresholdPrefix)
+	for _, parameter := range parameters {
+		if !strings.HasPrefix(parameter.Name, tc.ThresholdPrefix) {
+			continue
+		}
+		parameterName := parameter.Name[thresholdPrefixLength:]
+		parameterMap[parameterName], err = tc.StrToThreshold(parameter.Value)
+		if err != nil {
+			t.Fatalf("converting string '%s' to HealthThreshold: %s", parameter.Value, err.Error())
+		}
+		parameterFound[parameterName] = false
+	}
+	const expectedThresholdParameters = 3
+	if len(parameterMap) != expectedThresholdParameters {
+		t.Fatalf("expected Profile '%s' to contain %d Parameters with names starting with '%s' but %d such Parameters were found", profileName, expectedThresholdParameters, tc.ThresholdPrefix, len(parameterMap))
+	}
+	tmConfig, _, err := TOSession.GetTrafficMonitorConfig(cdnName)
+	if err != nil {
+		t.Fatalf("getting Traffic Monitor Config: %s", err.Error())
+	}
+	profileFound := false
+	var profile tc.TMProfile
+	for _, profile = range tmConfig.Profiles {
+		if profile.Name == profileName {
+			profileFound = true
+			break
+		}
+	}
+	if !profileFound {
+		t.Fatalf("Traffic Monitor Config contained no Profile named '%s", profileName)
+	}
+	for parameterName, value := range profile.Parameters.Thresholds {
+		if _, ok := parameterFound[parameterName]; !ok {
+			t.Fatalf("unexpected Threshold Parameter name '%s' found in Profile '%s' in Traffic Monitor Config", parameterName, profileName)
+		}
+		parameterFound[parameterName] = true
+		if parameterMap[parameterName].String() != value.String() {
+			t.Fatalf("expected '%s' but received '%s' for Threshold Parameter '%s' in Profile '%s' in Traffic Monitor Config", parameterMap[parameterName].String(), value.String(), parameterName, profileName)
+		}
+	}
+	missingParameters := []string{}
+	for parameterName, found := range parameterFound {
+		if !found {
+			missingParameters = append(missingParameters, parameterName)
+		}
+	}
+	if len(missingParameters) != 0 {
+		t.Fatalf("Threshold parameters defined for Profile '%s' but missing for Profile '%s' in Traffic Monitor Config: %s", profileName, profileName, strings.Join(missingParameters, ", "))
+	}
+}
+
 func SnapshotTestCDNbyName(t *testing.T) {
 
 	firstCDN := testData.CDNs[0]
-	_, err := TOSession.SnapshotCRConfig(firstCDN.Name)
+	_, err := TOSession.SnapshotCRConfig(firstCDN.Name, nil)
 	if err != nil {
 		t.Errorf("failed to snapshot CDN by name: %v", err)
 	}
@@ -166,7 +297,7 @@ func SnapshotTestCDNbyName(t *testing.T) {
 func SnapshotTestCDNbyInvalidName(t *testing.T) {
 
 	invalidCDNName := "cdn-invalid"
-	_, err := TOSession.SnapshotCRConfig(invalidCDNName)
+	_, err := TOSession.SnapshotCRConfig(invalidCDNName, nil)
 	if err == nil {
 		t.Errorf("snapshot occurred on invalid cdn name: %v - %v", invalidCDNName, err)
 	}
@@ -176,7 +307,7 @@ func SnapshotTestCDNbyID(t *testing.T) {
 
 	firstCDN := testData.CDNs[0]
 	// Retrieve the CDN by name so we can get the id for the snapshot
-	resp, _, err := TOSession.GetCDNByName(firstCDN.Name)
+	resp, _, err := TOSession.GetCDNByName(firstCDN.Name, nil)
 	if err != nil {
 		t.Errorf("cannot GET CDN by name: '%s', %v", firstCDN.Name, err)
 	}

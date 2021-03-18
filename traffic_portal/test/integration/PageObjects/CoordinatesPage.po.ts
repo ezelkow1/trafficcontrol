@@ -16,9 +16,31 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { by, element, browser } from 'protractor'
+import { by, element, browser } from 'protractor';
+
+import { randomize } from "../config";
 import { BasePage } from './BasePage.po';
 import { SideNavigationPage } from './SideNavigationPage.po';
+
+interface Coordinates {
+    description?: string;
+    Latitude: number;
+    Longitude: number;
+    Name: string;
+    validationMessage?: string;
+}
+
+interface UpdateCoordinate {
+    description: string;
+    Latitude: number;
+    validationMessage?: string;
+}
+
+interface DeleteCoordinate {
+    Name: string;
+    validationMessage?: string;
+}
+
 export class CoordinatesPage extends BasePage {
 
     private btnCreateNewCoordinates = element(by.xpath("//button[@title='Create Coordinate']"));
@@ -27,10 +49,8 @@ export class CoordinatesPage extends BasePage {
     private txtLongitude = element(by.name('longitude'))
     private txtSearch = element(by.id('coordinatesTable_filter')).element(by.css('label input'));
     private btnDelete = element(by.buttonText('Delete'));
-    private btnYes = element(by.buttonText('Yes'));
     private txtConfirmName = element(by.name('confirmWithNameInput'));
-    private config = require('../config');
-    private randomize = this.config.randomize;
+    private randomize = randomize;
 
     async OpenCoordinatesPage() {
         let snp = new SideNavigationPage();
@@ -41,7 +61,7 @@ export class CoordinatesPage extends BasePage {
         await snp.ClickTopologyMenu();
     }
 
-    async CreateCoordinates(coordinates) {
+    public async CreateCoordinates(coordinates: Coordinates): Promise<boolean> {
         let result = false;
         let basePage = new BasePage();
         await this.btnCreateNewCoordinates.click();
@@ -60,8 +80,7 @@ export class CoordinatesPage extends BasePage {
 
     }
 
-    async SearchCoordinates(nameCoordinates: string) {
-        let result = false;
+    public async SearchCoordinates(nameCoordinates: string): Promise<boolean> {
         let snp = new SideNavigationPage();
         let name = nameCoordinates + this.randomize;
         await snp.NavigateToCoordinatesPage();
@@ -69,14 +88,13 @@ export class CoordinatesPage extends BasePage {
         await this.txtSearch.sendKeys(name);
         if (await browser.isElementPresent(element(by.xpath("//td[@data-search='^" + name + "$']"))) == true) {
             await element(by.xpath("//td[@data-search='^" + name + "$']")).click();
-            result = true;
-        } else {
-            result = undefined;
+            return true;
         }
-        return result;
+        return false;
     }
-    async UpdateCoordinates(coordinates) {
-        let result = false;
+
+    async UpdateCoordinates(coordinates: UpdateCoordinate): Promise<boolean | undefined> {
+        let result: boolean | undefined = false;
         let basePage = new BasePage();
         switch (coordinates.description) {
             case "update coordinates latitude":
@@ -99,7 +117,8 @@ export class CoordinatesPage extends BasePage {
         }
         return result;
     }
-    async DeleteCoordinates(coordinates) {
+
+    public async DeleteCoordinates(coordinates: DeleteCoordinate): Promise<boolean> {
         let result = false;
         let basePage = new BasePage();
         await this.btnDelete.click();

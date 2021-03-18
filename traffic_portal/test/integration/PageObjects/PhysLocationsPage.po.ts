@@ -16,10 +16,38 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { by, element } from 'protractor'
+import { by, element } from 'protractor';
+
+import { randomize } from '../config';
 import { BasePage } from './BasePage.po';
 import { SideNavigationPage } from './SideNavigationPage.po';
-import { ParametersPage } from './ParametersPage.po';
+
+interface UpdatePhysicalLocation {
+  description: string;
+  Region: string;
+  validationMessage?: string;
+}
+
+interface CreatePhysicalLocation {
+  Address: string;
+  City: string;
+  Comments: string;
+  Email: string;
+  Name: string;
+  Phone: string;
+  Poc: string;
+  Region: string;
+  ShortName: string;
+  State: string;
+  Zip: string;
+  validationMessage?: string;
+}
+
+interface DeletePhysicalLocation {
+  Name: string;
+  validationMessage?: string;
+}
+
 export class PhysLocationsPage extends BasePage {
 
   private btnCreateNewPhysLocation = element(by.name('createPhysLocationButton'));
@@ -35,11 +63,9 @@ export class PhysLocationsPage extends BasePage {
   private txtRegion = element(by.name('region'));
   private txtComments = element(by.name('comments'));
   private txtSearch = element(by.id('physLocationsTable_filter')).element(by.css('label input'));
-  private mnuPhysLocationsTable = element(by.id('physLocationsTable'));
   private btnDelete = element(by.buttonText('Delete'));
   private txtConfirmName = element(by.name('confirmWithNameInput'));
-  private config = require('../config');
-  private randomize = this.config.randomize;
+  private randomize = randomize;
 
   async OpenPhysLocationPage() {
     let snp = new SideNavigationPage();
@@ -49,7 +75,8 @@ export class PhysLocationsPage extends BasePage {
     let snp = new SideNavigationPage();
     await snp.ClickTopologyMenu();
   }
-  async CreatePhysLocation(physlocation) {
+
+  public async CreatePhysLocation(physlocation: CreatePhysicalLocation): Promise<boolean> {
     let result = false;
     let basePage = new BasePage();
     let snp = new SideNavigationPage();
@@ -76,8 +103,8 @@ export class PhysLocationsPage extends BasePage {
     })
     return result;
   }
-  async SearchPhysLocation(physlocationName) {
-    let result = false;
+
+  public async SearchPhysLocation(physlocationName: string): Promise<void> {
     let snp = new SideNavigationPage();
     let name = physlocationName + this.randomize;
     await snp.NavigateToPhysLocation();
@@ -89,8 +116,8 @@ export class PhysLocationsPage extends BasePage {
       });
     }).first().click();
   }
-  async UpdatePhysLocation(physlocation) {
-    let result = false;
+
+  public async UpdatePhysLocation(physlocation: UpdatePhysicalLocation): Promise<boolean | undefined> {
     let basePage = new BasePage();
 
     switch (physlocation.description) {
@@ -99,28 +126,19 @@ export class PhysLocationsPage extends BasePage {
         await basePage.ClickUpdate();
         break;
       default:
-        result = undefined;
+        return undefined;
     }
-    if (result = !undefined) {
-        result = await basePage.GetOutputMessage().then(function (value) {
-          if (physlocation.validationMessage == value) {
-            return true;
-          } else {
-            return false;
-          }
-        })
-
-      }
-    return result;
+    return await basePage.GetOutputMessage().then(value => physlocation.validationMessage === value);
   }
-  async DeletePhysLocation(physlocation) {
+
+  public async DeletePhysLocation(physlocation: DeletePhysicalLocation): Promise<boolean> {
     let result = false;
     let basePage = new BasePage();
     await this.btnDelete.click();
     await this.txtConfirmName.sendKeys(physlocation.Name + this.randomize);
     await basePage.ClickDeletePermanently();
     result = await basePage.GetOutputMessage().then(function (value) {
-      if (physlocation.validationMessage == value) {
+      if (physlocation.validationMessage === value) {
         return true;
       } else {
         return false;
